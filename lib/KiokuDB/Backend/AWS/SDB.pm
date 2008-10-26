@@ -112,11 +112,6 @@ sub _item {
     return $item;
     
 }
-sub deserialize {
-    my ($self, $doc) = @_;
-
-
-}
 sub _entry {
     my ($self, $item) = @_;
     
