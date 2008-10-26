@@ -214,17 +214,20 @@ sub exists {
 sub search {
     my $self = shift;
     my %args = @_;
-    
+    warn "PROPPER SEARCH";
     $self->response($self->domain->query(\%args));
     
-    my @results = $self->response->results;
+    my @results = $self->_inflate_results($self->response->results);
     
-    return $self->_inflate_results(@results);
+    return Data::Stream::Bulk::Array->new(
+        array => \@results,
+    );
+    
 }
 
 sub simple_search {
     my ( $self, $proto ) = @_;
-    
+    warn "SIMPLE SEARCH";
     # convert $proto to a querystring
     my @predicates = ("['root' = '1']");
     foreach my $k (keys %$proto) {
@@ -236,11 +239,8 @@ sub simple_search {
     my $q = join(' intersection ', @predicates);
     
 #    warn "   QUERY: $q";
-    my @results = $self->search(query => $q);
+    return $self->search(query => $q);
     
-    return Data::Stream::Bulk::Array->new(
-        array => \@results,
-    );
 }
 
 sub _inflate_results {
