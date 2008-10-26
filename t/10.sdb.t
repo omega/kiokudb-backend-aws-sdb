@@ -22,6 +22,7 @@ my $backend = KiokuDB::Backend::AWS::SDB->new(
     aws_domain => 'kiokudb-test-domain-' . lc($aws_id),
     
 );
+$Carp::Verbose = 1;
 
 run_all_fixtures( KiokuDB->new( backend => $backend ));
 

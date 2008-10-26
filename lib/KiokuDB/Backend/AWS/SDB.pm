@@ -9,6 +9,8 @@ use Carp qw/croak/;
 with qw(
 
     KiokuDB::Backend
+
+    KiokuDB::Backend::UnicodeSafe
     
     KiokuDB::Backend::Serialize::JSPON
 
@@ -20,7 +22,10 @@ has 'domain' => (isa => 'Amazon::SimpleDB::Domain', is => 'ro');
 
 has '_last_response' => (isa => 'Amazon::SimpleDB::Response', is => 'rw');
 
-has 'json' => (isa => 'JSON', is => 'ro', lazy_build => 1, handles => [qw/encode decode/]);
+has 'json' => (isa => 'JSON', is => 'ro', lazy_build => 1);
+
+use Encode qw//;
+use MIME::Base64 qw//;
 
 use JSON;
 
@@ -125,8 +130,15 @@ sub _entry {
     # We need to flatten single item arrays (Amazon::SimpleDB returns all attrs
     # as array-refs)
     map { $doc->{$_} = $doc->{$_}->[0] if scalar(@{ $doc->{$_}}) == 1 } keys %$doc;
-
-    my %doc = %{ $self->decode($doc->{_obj}) };
+    if (ref($doc->{_obj})) {
+        my $o = $doc->{_obj};
+        if (exists($o->{content}) and exists($o->{encoding})) {
+            if ($o->{encoding} eq 'base64') {
+                $doc->{_obj} = MIME::Base64::decode_base64($o->{content});
+            }
+        }
+    }
+    my %doc = %{ $self->json->decode(Encode::decode_utf8($doc->{_obj})) };
 
     return $self->expand_jspon(\%doc, root => delete $doc->{root});
 }
@@ -158,14 +170,14 @@ sub insert {
         # TODO handle some sort of prev-stuff here?
         my $attr = {
             id => $collapsed->{id},
-            _obj => $self->encode($collapsed),
+            _obj => Encode::encode_utf8($self->json->encode($collapsed)),
             exists => 1
         };
         $attr->{root} = $e->root if $e->root;
         foreach my $k (keys %$collapsed) {
             next if ref($collapsed->{$k});
             # Add theese to toplevel
-            $attr->{$k} = $collapsed->{$k};
+            $attr->{$k} = Encode::encode_utf8($collapsed->{$k});
         }
         $self->response($obj->post_attributes($attr));
     }
@@ -219,11 +231,11 @@ sub simple_search {
         my $v = $proto->{$k};
         # We don't support complex queries for now
         next if ref($v);
-        push(@predicates, "['$k' = '$v']");
+        push(@predicates, "['$k' = '" . Encode::encode_utf8($v) . "']");
     }
     my $q = join(' intersection ', @predicates);
     
-    warn "   QUERY: $q";
+#    warn "   QUERY: $q";
     my @results = $self->search(query => $q);
     
     return Data::Stream::Bulk::Array->new(
