@@ -25,31 +25,6 @@ my $backend = KiokuDB::Backend::AWS::SDB->new(
 
 run_all_fixtures( KiokuDB->new( backend => $backend ));
 
-$Carp::Verbose = 1;
-
-my @entries = ( map { KiokuDB::Entry->new($_) }
-    { id => 1, root => 1, data => { name => "foo", age => 3, tags => [qw/a b/] } },
-    { id => 2, root => 1, data => { name => "bar", age => 3 } },
-    { id => 3, root => 1, data => { name => "gorch", age => 5 } },
-    { id => 4, data => { name => "zot", age => 3 } },
-);
-
-$backend->insert(@entries);
-
-can_ok( $backend, qw(simple_search) );
-
-my $three = $backend->simple_search({ age => 3 });
-
-isa_ok( $three, "Data::Stream::Bulk::Array" );
-
-is_deeply(
-    [ sort { $a->id <=> $b->id } $three->all ],
-    [ sort { $a->id <=> $b->id } @entries[0 .. 1] ],
-    "search",
-);
-
-
-
 END {
-    #$b->domain->delete;
+#    $backend->domain->delete;
 }

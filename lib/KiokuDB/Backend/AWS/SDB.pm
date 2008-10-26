@@ -10,7 +10,7 @@ with qw(
 
     KiokuDB::Backend
     
-    KiokuDB::Backend::Serialize::JSON
+    KiokuDB::Backend::Serialize::JSPON
 
     KiokuDB::Backend::Query
     KiokuDB::Backend::Query::Simple
@@ -19,6 +19,16 @@ with qw(
 has 'domain' => (isa => 'Amazon::SimpleDB::Domain', is => 'ro');
 
 has '_last_response' => (isa => 'Amazon::SimpleDB::Response', is => 'rw');
+
+has 'json' => (isa => 'JSON', is => 'ro', lazy_build => 1, handles => [qw/encode decode/]);
+
+use JSON;
+
+sub _build_json {
+    my ($self) = @_;
+    
+    JSON->new()->utf8->pretty;
+}
 
 use Data::Dump qw/dump/;
 
@@ -74,6 +84,7 @@ sub response {
     return $self->_last_response unless $res;
     
     if ($res->is_error) {
+        warn " URL: " . $res->http_response->request->uri;
         croak("Error during request: " . $res->code . " (" . $res->message . ")");
     } else {
         $self->_last_response($res);
@@ -101,7 +112,11 @@ sub _item {
     return $item;
     
 }
+sub deserialize {
+    my ($self, $doc) = @_;
 
+
+}
 sub _entry {
     my ($self, $item) = @_;
     
@@ -111,21 +126,14 @@ sub _entry {
     
     # inflate it back into a KiokuDB::Entry-object
     $self->response($item->get_attributes);
-    my $attrs = $self->response->results;
-    
-    if ($attrs->{data}) {
-        my %args = (
-            id => $item->name,
-            data => $self->deserialize($attrs->{data}->[0]),
-        );
-        $args{class} = $attrs->{class}->[0] if $attrs->{class};
-        $args{root} = $attrs->{root}->[0] if $attrs->{root};
-        return KiokuDB::Entry->new(%args);
-    } else {
-        # something is missing, we push undef
-        return undef;
-    }
-    
+    my $doc = $self->response->results;
+    # We need to flatten single item arrays (Amazon::SimpleDB returns all attrs
+    # as array-refs)
+    map { $doc->{$_} = $doc->{$_}->[0] if scalar(@{ $doc->{$_}}) == 1 } keys %$doc;
+
+    my %doc = %{ $self->decode($doc->{_obj}) };
+
+    return $self->expand_jspon(\%doc, root => delete $doc->{root});
 }
 =method get
 
@@ -149,19 +157,22 @@ sub insert {
     my @entries = @_;
     
     foreach my $e (@entries) {
+        my $collapsed = $self->collapse_jspon($e);
         my $obj = $self->_item($e->id);
-        my $data = $self->serialize($e->data);
-        my $attrs = {
-            data => $data,
+        
+        # TODO handle some sort of prev-stuff here?
+        my $attr = {
+            id => $collapsed->{id},
+            _obj => $self->encode($collapsed),
+            exists => 1
         };
-        $attrs->{class} = $e->class if $e->class;
-        $attrs->{root} = $e->root if $e->root;
-        # here we should most likely add some index columns?
-        foreach my $k (keys %{ $e->data }) {
-            next if (ref($e->data->{$k}));
-            $attrs->{"idx_$k"} = $e->data->{$k};
+        $attr->{root} = $e->root if $e->root;
+        foreach my $k (keys %$collapsed) {
+            next if ref($collapsed->{$k});
+            # Add theese to toplevel
+            $attr->{$k} = $collapsed->{$k};
         }
-        $self->response($obj->post_attributes($attrs));
+        $self->response($obj->post_attributes($attr));
     }
 }
 
@@ -185,8 +196,8 @@ sub exists {
         my $r = $self->_item($i);
         
         # inflate it back into a KiokuDB::Entry-object
-        $self->response($r->get_attributes([qw/class/]));
-        push(@exists, $self->response->results->{class} ? 1 : 0);
+        $self->response($r->get_attributes('exists'));
+        push(@exists, $self->response->results->{exists} ? 1 : 0);
     
     }
     return @exists;
@@ -213,7 +224,7 @@ sub simple_search {
         my $v = $proto->{$k};
         # We don't support complex queries for now
         next if ref($v);
-        push(@predicates, "['idx_$k' = '$v']");
+        push(@predicates, "['$k' = '$v']");
     }
     my $q = join(' intersection ', @predicates);
     
