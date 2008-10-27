@@ -32,7 +32,7 @@ use JSON;
 sub _build_json {
     my ($self) = @_;
     
-    JSON->new()->utf8->pretty;
+    JSON->new()->utf8; #->pretty;
 }
 
 use Data::Dump qw/dump/;
@@ -122,7 +122,6 @@ sub _entry {
     
     # We inflate an ID into a propper object
     $item = $self->_item($item);
-
     
     # inflate it back into a KiokuDB::Entry-object
     $self->response($item->get_attributes);
@@ -138,9 +137,11 @@ sub _entry {
             }
         }
     }
+    # No length means no object
+    return undef unless $doc->{_obj};
     my %doc = %{ $self->json->decode(Encode::decode_utf8($doc->{_obj})) };
-
-    return $self->expand_jspon(\%doc, root => delete $doc->{root});
+    
+    return $self->expand_jspon(\%doc, backend_data => $item, root => delete $doc->{root});
 }
 =method get
 
@@ -168,16 +169,24 @@ sub insert {
         my $obj = $self->_item($e->id);
         
         # TODO handle some sort of prev-stuff here?
+        if ($e->prev) {
+            $e->backend_data($e->prev->backend_data);
+        } else {
+            $e->backend_data($obj);
+        }
         my $attr = {
             id => $collapsed->{id},
             _obj => Encode::encode_utf8($self->json->encode($collapsed)),
             exists => 1
         };
         $attr->{root} = $e->root if $e->root;
-        foreach my $k (keys %$collapsed) {
-            next if ref($collapsed->{$k});
-            # Add theese to toplevel
-            $attr->{$k} = Encode::encode_utf8($collapsed->{$k});
+        if (ref($collapsed->{data}) eq 'HASH') {
+            foreach my $k (keys %{$collapsed->{data}}) {
+                next if ref($collapsed->{data}->{$k});
+                # Add theese to toplevel, but not topple on the amazon stuff 
+                $attr->{"idx_" . $k} = Encode::encode_utf8($collapsed->{data}->{$k});
+            }
+            
         }
         $self->response($obj->post_attributes($attr));
     }
@@ -214,11 +223,9 @@ sub exists {
 sub search {
     my $self = shift;
     my %args = @_;
-    warn "PROPPER SEARCH";
     $self->response($self->domain->query(\%args));
     
     my @results = $self->_inflate_results($self->response->results);
-    
     return Data::Stream::Bulk::Array->new(
         array => \@results,
     );
@@ -227,14 +234,13 @@ sub search {
 
 sub simple_search {
     my ( $self, $proto ) = @_;
-    warn "SIMPLE SEARCH";
     # convert $proto to a querystring
     my @predicates = ("['root' = '1']");
     foreach my $k (keys %$proto) {
         my $v = $proto->{$k};
         # We don't support complex queries for now
         next if ref($v);
-        push(@predicates, "['$k' = '" . Encode::encode_utf8($v) . "']");
+        push(@predicates, "['idx_$k' = '" . Encode::encode_utf8($v) . "']");
     }
     my $q = join(' intersection ', @predicates);
     
