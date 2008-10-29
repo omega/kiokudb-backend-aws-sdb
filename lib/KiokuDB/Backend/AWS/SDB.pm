@@ -18,14 +18,26 @@ with qw(
     KiokuDB::Backend::Query::Simple
 );
 
-has 'domain' => (isa => 'Amazon::SimpleDB::Domain', is => 'ro');
-
-has 'json' => (isa => 'JSON', is => 'ro', lazy_build => 1);
-
 use Encode qw//;
 use MIME::Base64 qw//;
 
 use JSON;
+
+use Data::Dump qw/dump/;
+
+use Amazon::SimpleDB;
+use Amazon::SimpleDB::Item;
+use Data::Stream::Bulk::Util qw/bulk/;
+
+has 'aws_id' => (isa => 'Str', is => 'ro');
+has 'aws_key' => (isa => 'Str', is => 'ro');
+has 'aws_domain' => (isa => 'Str', is => 'ro');
+
+has 'create' => (isa => 'Bool', is => 'ro', default => 0);
+
+has 'domain' => (isa => 'Amazon::SimpleDB::Domain', is => 'ro', lazy_build => 1);
+
+has 'json' => (isa => 'JSON', is => 'ro', lazy_build => 1);
 
 sub _build_json {
     my ($self) = @_;
@@ -33,44 +45,38 @@ sub _build_json {
     JSON->new()->utf8; #->pretty;
 }
 
-use Data::Dump qw/dump/;
-
-use Amazon::SimpleDB;
-use Amazon::SimpleDB::Item;
-use Data::Stream::Bulk::Array;
-
-sub BUILD {
-    my ($self, $args) = @_;
-
-    croak("missing aws_id and aws_key params in new call for" . __PACKAGE__)
-        unless ($args->{aws_id} and $args->{aws_key});
+sub _build_domain {
+    my ($self) = @_;
     
     my $sdb = Amazon::SimpleDB->new(
         {
-            aws_access_key_id       => $args->{aws_id},
-            aws_secret_access_key   => $args->{aws_key},
+            aws_access_key_id       => $self->aws_id,
+            aws_secret_access_key   => $self->aws_key,
         }
     );
-    
-    croak("missing domain argument in new call for " . __PACKAGE__)
-        unless ($args->{aws_domain});
     
     # check if we have this domain first. create domain is sloooow
     
     my $r_domains = $sdb->domains;
     my $domain;
     if ($r_domains->is_success) {
-        ($domain) = grep { $_->name eq $args->{aws_domain} } $r_domains->results;
+        ($domain) = grep { $_->name eq $self->aws_domain } $r_domains->results;
     }
     
     unless ($domain) {
-        $self->response($sdb->create_domain($args->{aws_domain}));
+        if ($self->create) {
+            $self->response($sdb->create_domain($self->aws_domain));
+        } else {
+            croak("Domain '" . $self->aws_domain 
+                . "' does not exist, and create not specified" );
+        }
     }
     
     
-    $self->{domain} = $sdb->domain($args->{aws_domain});
+    $sdb->domain($self->aws_domain);
     
 }
+
 
 =method response [$response]
 
@@ -99,12 +105,12 @@ sub _item {
     my $item;
     if (ref($id) eq 'Amazon::SimpleDB::Item') {
         # We just need to fix something..
-        $id->{domain} = $id->{domain}->name if (ref($id->{domain}));
+        $id->{domain} = $id->domain->name if (ref($id->{domain}));
         $item = $id;
     } else {
         $item = Amazon::SimpleDB::Item->new({
-            account => $self->{domain}->account,
-            domain  => $self->{domain}->name,
+            account => $self->domain->account,
+            domain  => $self->domain->name,
             name    => $id,
         });
         
@@ -222,16 +228,14 @@ sub search {
     my $res = $self->response($self->domain->query(\%args));
     
     my @results = $self->_inflate_results($res->results);
-    return Data::Stream::Bulk::Array->new(
-        array => \@results,
-    );
+    return bulk(@results);
     
 }
 
 sub simple_search {
     my ( $self, $proto ) = @_;
     # convert $proto to a querystring
-    my @predicates = ("['root' = '1']");
+    my @predicates; # = ("['root' = '1']");
     foreach my $k (keys %$proto) {
         my $v = $proto->{$k};
         # We don't support complex queries for now
