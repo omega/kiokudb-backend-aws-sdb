@@ -20,8 +20,6 @@ with qw(
 
 has 'domain' => (isa => 'Amazon::SimpleDB::Domain', is => 'ro');
 
-has '_last_response' => (isa => 'Amazon::SimpleDB::Response', is => 'rw');
-
 has 'json' => (isa => 'JSON', is => 'ro', lazy_build => 1);
 
 use Encode qw//;
@@ -86,15 +84,13 @@ Each call to the webservice should send the response object here
 
 sub response {
     my ($self, $res) = @_;
-    return $self->_last_response unless $res;
-    
+
+    croak("Calling response without a response-object is deprecated") unless $res;
     if ($res->is_error) {
         warn " URL: " . $res->http_response->request->uri;
         croak("Error during request: " . $res->code . " (" . $res->message . ")");
-    } else {
-        $self->_last_response($res);
     }
-    return $self->_last_response();
+    return $res;
     
 }
 
@@ -124,8 +120,8 @@ sub _entry {
     $item = $self->_item($item);
     
     # inflate it back into a KiokuDB::Entry-object
-    $self->response($item->get_attributes);
-    my $doc = $self->response->results;
+    my $res = $self->response($item->get_attributes);
+    my $doc = $res->results;
     # We need to flatten single item arrays (Amazon::SimpleDB returns all attrs
     # as array-refs)
     map { $doc->{$_} = $doc->{$_}->[0] if scalar(@{ $doc->{$_}}) == 1 } keys %$doc;
@@ -140,7 +136,6 @@ sub _entry {
     # No length means no object
     return undef unless $doc->{_obj};
     my %doc = %{ $self->json->decode(Encode::decode_utf8($doc->{_obj})) };
-    
     return $self->expand_jspon(\%doc, backend_data => $item, root => delete $doc->{root});
 }
 =method get
@@ -180,6 +175,7 @@ sub insert {
             exists => 1
         };
         $attr->{root} = $e->root if $e->root;
+        $attr->{'idx_class'} = $collapsed->{'__CLASS__'} if $collapsed->{'__CLASS__'};
         if (ref($collapsed->{data}) eq 'HASH') {
             foreach my $k (keys %{$collapsed->{data}}) {
                 next if ref($collapsed->{data}->{$k});
@@ -212,8 +208,8 @@ sub exists {
         my $r = $self->_item($i);
         
         # inflate it back into a KiokuDB::Entry-object
-        $self->response($r->get_attributes('exists'));
-        push(@exists, $self->response->results->{exists} ? 1 : 0);
+        my $res = $self->response($r->get_attributes('exists'));
+        push(@exists, $res->results->{exists} ? 1 : 0);
     
     }
     return @exists;
@@ -223,9 +219,9 @@ sub exists {
 sub search {
     my $self = shift;
     my %args = @_;
-    $self->response($self->domain->query(\%args));
+    my $res = $self->response($self->domain->query(\%args));
     
-    my @results = $self->_inflate_results($self->response->results);
+    my @results = $self->_inflate_results($res->results);
     return Data::Stream::Bulk::Array->new(
         array => \@results,
     );
