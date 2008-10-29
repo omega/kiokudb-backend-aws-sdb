@@ -29,7 +29,7 @@ my @entries = ( map { KiokuDB::Entry->new($_) }
     { id => 1, root => 1, data => { name => "foo", age => 3, tags => [qw/a b/] } },
     { id => 2, root => 1, data => { name => "bar", age => 3 } },
     { id => 3, root => 1, data => { name => "gorch", age => 5 } },
-    { id => 4, data => { name => "zot", age => 3 } },
+    { id => 4, root => undef, data => { name => "zot", age => 3 } },
 );
 
 $backend->insert(@entries);
@@ -42,7 +42,7 @@ isa_ok( $three, "Data::Stream::Bulk::Array" );
 
 is_deeply(
     [ sort { $a->id <=> $b->id } $three->all ],
-    [ sort { $a->id <=> $b->id } @entries[0 .. 1] ],
+    [ sort { $a->id <=> $b->id } @entries[0 .. 1], $entries[3] ],
     "search",
 );
 

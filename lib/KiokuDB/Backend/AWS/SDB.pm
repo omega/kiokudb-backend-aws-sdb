@@ -35,6 +35,8 @@ has 'aws_domain' => (isa => 'Str', is => 'ro');
 
 has 'create' => (isa => 'Bool', is => 'ro', default => 0);
 
+has 'sdb' => (isa => 'Amazon::SimpleDB', is => 'ro', lazy_build => 1);
+
 has 'domain' => (isa => 'Amazon::SimpleDB::Domain', is => 'ro', lazy_build => 1);
 
 has 'json' => (isa => 'JSON', is => 'ro', lazy_build => 1);
@@ -44,20 +46,22 @@ sub _build_json {
     
     JSON->new()->utf8; #->pretty;
 }
-
-sub _build_domain {
-    my ($self) = @_;
-    
-    my $sdb = Amazon::SimpleDB->new(
+sub _build_sdb {
+    my $self = shift;
+    Amazon::SimpleDB->new(
         {
             aws_access_key_id       => $self->aws_id,
             aws_secret_access_key   => $self->aws_key,
         }
     );
+}
+sub _build_domain {
+    my ($self) = @_;
+    
     
     # check if we have this domain first. create domain is sloooow
     
-    my $r_domains = $sdb->domains;
+    my $r_domains = $self->sdb->domains;
     my $domain;
     if ($r_domains->is_success) {
         ($domain) = grep { $_->name eq $self->aws_domain } $r_domains->results;
@@ -65,7 +69,7 @@ sub _build_domain {
     
     unless ($domain) {
         if ($self->create) {
-            $self->response($sdb->create_domain($self->aws_domain));
+            $self->response($self->sdb->create_domain($self->aws_domain));
         } else {
             croak("Domain '" . $self->aws_domain 
                 . "' does not exist, and create not specified" );
@@ -73,7 +77,7 @@ sub _build_domain {
     }
     
     
-    $sdb->domain($self->aws_domain);
+    $self->sdb->domain($self->aws_domain);
     
 }
 
@@ -180,7 +184,7 @@ sub insert {
             _obj => Encode::encode_utf8($self->json->encode($collapsed)),
             exists => 1
         };
-        $attr->{root} = $e->root if $e->root;
+        $attr->{root} = $e->root if defined($e->root);
         $attr->{'idx_class'} = $collapsed->{'__CLASS__'} if $collapsed->{'__CLASS__'};
         if (ref($collapsed->{data}) eq 'HASH') {
             foreach my $k (keys %{$collapsed->{data}}) {
