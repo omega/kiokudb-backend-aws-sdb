@@ -16,6 +16,9 @@ with qw(
 
     KiokuDB::Backend::Query
     KiokuDB::Backend::Query::Simple
+
+    KiokuDB::Backend::Scan
+    KiokuDB::Backend::Clear
 );
 
 use Encode qw//;
@@ -70,6 +73,9 @@ sub _build_domain {
     unless ($domain) {
         if ($self->create) {
             $self->response($self->sdb->create_domain($self->aws_domain));
+            # I think we need to delay here for a litt, to make sure the domain exists
+            # everywhere
+            sleep 5;
         } else {
             croak("Domain '" . $self->aws_domain 
                 . "' does not exist, and create not specified" );
@@ -146,7 +152,8 @@ sub _entry {
     # No length means no object
     return undef unless $doc->{_obj};
     my %doc = %{ $self->json->decode(Encode::decode_utf8($doc->{_obj})) };
-    return $self->expand_jspon(\%doc, backend_data => $item, root => delete $doc->{root});
+    # TODO: , backend_data => $item   ?? needed?
+    return $self->expand_jspon(\%doc, root => delete $doc->{root});
 }
 =method get
 
@@ -174,17 +181,17 @@ sub insert {
         my $obj = $self->_item($e->id);
         
         # TODO handle some sort of prev-stuff here?
-        if ($e->prev) {
-            $e->backend_data($e->prev->backend_data);
-        } else {
-            $e->backend_data($obj);
-        }
+#        if ($e->prev) {
+#            $e->backend_data($e->prev->backend_data);
+#        } else {
+#            $e->backend_data($obj);
+#        }
         my $attr = {
             id => $collapsed->{id},
             _obj => Encode::encode_utf8($self->json->encode($collapsed)),
             exists => 1
         };
-        $attr->{root} = $e->root if defined($e->root);
+        $attr->{root} = (defined($e->root) and $e->root) ? 1 : 0;
         $attr->{'idx_class'} = $collapsed->{'__CLASS__'} if $collapsed->{'__CLASS__'};
         if (ref($collapsed->{data}) eq 'HASH') {
             foreach my $k (keys %{$collapsed->{data}}) {
@@ -229,8 +236,8 @@ sub exists {
 sub search {
     my $self = shift;
     my %args = @_;
+    # TODO: Fix this so it will do next / limit stuff properly
     my $res = $self->response($self->domain->query(\%args));
-    
     my @results = $self->_inflate_results($res->results);
     return bulk(@results);
     
@@ -260,4 +267,34 @@ sub _inflate_results {
     return map { $_ = $self->_entry($_) } @_;
 }
 
+
+## Methods for Scan
+
+sub all_entries {
+    my $self = shift;
+    
+    return $self->search();
+}
+
+sub root_entries {
+    my $self = shift;
+    return $self->search(query => "['root' = '1']")
+    
+}
+
+sub child_entries {
+    my $self = shift;
+    return $self->search(query => "['root' = '0']")
+    
+    
+}
+
+
+## Methods for Clear
+
+sub clear {
+    my $self = shift;
+    
+    $self->delete($self->all_entries->all);
+}
 1; # End of KiokuDB::Backend::AWS::SDB
