@@ -10,15 +10,15 @@ with qw(
 
     KiokuDB::Backend
 
-    KiokuDB::Backend::UnicodeSafe
-    
     KiokuDB::Backend::Serialize::JSPON
 
-    KiokuDB::Backend::Query
-    KiokuDB::Backend::Query::Simple
+    KiokuDB::Backend::Role::UnicodeSafe
 
-    KiokuDB::Backend::Scan
-    KiokuDB::Backend::Clear
+    KiokuDB::Backend::Role::Query
+    KiokuDB::Backend::Role::Query::Simple
+
+    KiokuDB::Backend::Role::Scan
+    KiokuDB::Backend::Role::Clear
 );
 
 use Encode qw//;
