@@ -8,7 +8,7 @@ BEGIN {
     plan skip_all => 'Testing this module for real costs money.' 
         unless ($ENV{'AMAZON_S3_EXPENSIVE_TESTS'});
 
-    plan skip_all => 'Testing needs AWS_ACCESS_KEY_ID and AWS_ACCESS_KEY_SECRECT set' 
+    plan skip_all => 'Testing needs AWS_ACCESS_KEY_ID and AWS_ACCESS_KEY_SECRET set'
         unless ($ENV{'AWS_ACCESS_KEY_ID'} && $ENV{'AWS_ACCESS_KEY_SECRET'});
         
     plan 'no_plan';
