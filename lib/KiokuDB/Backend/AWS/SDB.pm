@@ -140,7 +140,7 @@ sub _entry {
     $item = $self->_item($item);
     
     # inflate it back into a KiokuDB::Entry-object
-    my $res = $self->response($item->get_attributes);
+    my $res = $self->response($item->get_attributes("data"));
     my $doc = $res->results;
     # We need to flatten single item arrays (Amazon::SimpleDB returns all attrs
     # as array-refs)
