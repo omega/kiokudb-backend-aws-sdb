@@ -150,7 +150,7 @@ sub _entry {
     # No length means no object
     return undef unless $doc->{data};
 
-    return $self->deserialize($doc->{data});
+    return $self->deserialize(Encode::decode_utf8($doc->{data}));
 }
 
 =method get
