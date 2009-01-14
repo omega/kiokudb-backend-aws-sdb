@@ -169,6 +169,8 @@ Fetches one or more objects from the SimpleDB domain
 sub get {
     my $self = shift;
     my @ids = @_;
+
+    # FIXME use QueryWithAttributes
     
     my @entries = map { $self->_entry($_) } @ids;
     # I think this is the only way we can do this properly?
