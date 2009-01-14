@@ -5,6 +5,19 @@ use Moose;
 
 use Carp qw/croak/;
 
+use Encode;
+use MIME::Base64;
+
+use JSON;
+
+use Data::Dump qw/dump/;
+
+use Amazon::SimpleDB;
+use Amazon::SimpleDB::Item;
+use Data::Stream::Bulk::Util qw/bulk/;
+
+use namespace::clean -except => 'meta';
+
 # TODO: Figure out what the hell sort of roles I should add here :p
 with qw(
 
@@ -20,17 +33,6 @@ with qw(
     KiokuDB::Backend::Role::Scan
     KiokuDB::Backend::Role::Clear
 );
-
-use Encode qw//;
-use MIME::Base64 qw//;
-
-use JSON;
-
-use Data::Dump qw/dump/;
-
-use Amazon::SimpleDB;
-use Amazon::SimpleDB::Item;
-use Data::Stream::Bulk::Util qw/bulk/;
 
 has 'aws_id' => (isa => 'Str', is => 'ro');
 has 'aws_key' => (isa => 'Str', is => 'ro');
