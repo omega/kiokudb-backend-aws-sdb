@@ -139,18 +139,18 @@ sub _entry {
     # We need to flatten single item arrays (Amazon::SimpleDB returns all attrs
     # as array-refs)
     map { $doc->{$_} = $doc->{$_}->[0] if scalar(@{ $doc->{$_}}) == 1 } keys %$doc;
-    if (ref($doc->{_obj})) {
-        my $o = $doc->{_obj};
+    if (ref($doc->{data})) {
+        my $o = $doc->{data};
         if (exists($o->{content}) and exists($o->{encoding})) {
             if ($o->{encoding} eq 'base64') {
-                $doc->{_obj} = MIME::Base64::decode_base64($o->{content});
+                $doc->{data} = MIME::Base64::decode_base64($o->{content});
             }
         }
     }
     # No length means no object
-    return undef unless $doc->{_obj};
+    return undef unless $doc->{data};
 
-    return $self->deserialize($doc->{_obj});
+    return $self->deserialize($doc->{data});
 }
 
 =method get
@@ -185,7 +185,7 @@ sub insert {
 #        }
         my $attr = {
             id => $e->id,
-            _obj => $self->serialize($e),
+            data => $self->serialize($e),
             exists => 1,
         };
         $attr->{root} = $e->root ? 1 : 0;
