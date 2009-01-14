@@ -209,19 +209,17 @@ sub delete {
 }
 
 sub exists {
-    my $self = shift;
-    my @ids = @_;
-    
-    my @exists;
-    foreach my $i (@ids) {
-        my $r = $self->_item($i);
-        
-        # inflate it back into a KiokuDB::Entry-object
-        my $res = $self->response($r->get_attributes('exists'));
-        push(@exists, $res->results->{exists} ? 1 : 0);
-    
-    }
-    return @exists;
+    my ( $self, @ids ) = @_;
+
+    # inflate it back into a KiokuDB::Entry-object
+    my @id_predicates = map { "'id' = '$_'" } @ids;
+
+    my $res = $self->domain->query({ query => "[" . join(" or ", @id_predicates) . "] intersection ['exists' = '1']" });
+
+    my @items = $res->results;
+    my %exists = map { $_->name => 1 } @items;
+
+    return @exists{@ids};
 }
 
 
