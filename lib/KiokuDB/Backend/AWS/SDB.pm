@@ -30,6 +30,12 @@ with qw(
 
     KiokuDB::Backend::Role::Scan
     KiokuDB::Backend::Role::Clear
+
+    KiokuDB::Backend::Role::Broken
+);
+
+use constant skip_fixtures => qw(
+    Overwrite
 );
 
 has 'aws_id' => (isa => 'Str', is => 'ro');
