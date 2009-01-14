@@ -23,9 +23,7 @@ with qw(
 
     KiokuDB::Backend
 
-    KiokuDB::Backend::Serialize::JSPON
-
-    KiokuDB::Backend::Role::UnicodeSafe
+    KiokuDB::Backend::Serialize::Delegate
 
     KiokuDB::Backend::Role::Query
     KiokuDB::Backend::Role::Query::Simple
@@ -43,8 +41,6 @@ has 'create' => (isa => 'Bool', is => 'ro', default => 0);
 has 'sdb' => (isa => 'Amazon::SimpleDB', is => 'ro', lazy_build => 1);
 
 has 'domain' => (isa => 'Amazon::SimpleDB::Domain', is => 'ro', lazy_build => 1);
-
-has 'json' => (isa => 'JSON', is => 'ro', lazy_build => 1);
 
 sub _build_json {
     my ($self) = @_;
@@ -153,10 +149,10 @@ sub _entry {
     }
     # No length means no object
     return undef unless $doc->{_obj};
-    my %doc = %{ $self->json->decode(Encode::decode_utf8($doc->{_obj})) };
-    # TODO: , backend_data => $item   ?? needed?
-    return $self->expand_jspon(\%doc, root => delete $doc->{root});
+
+    return $self->deserialize($doc->{_obj});
 }
+
 =method get
 
 Implemented as part of the KiokuDB::Backend basic interface.
@@ -179,7 +175,6 @@ sub insert {
     my @entries = @_;
     
     foreach my $e (@entries) {
-        my $collapsed = $self->collapse_jspon($e);
         my $obj = $self->_item($e->id);
         
         # TODO handle some sort of prev-stuff here?
@@ -189,20 +184,23 @@ sub insert {
 #            $e->backend_data($obj);
 #        }
         my $attr = {
-            id => $collapsed->{id},
-            _obj => Encode::encode_utf8($self->json->encode($collapsed)),
-            exists => 1
+            id => $e->id,
+            _obj => $self->serialize($e),
+            exists => 1,
         };
-        $attr->{root} = (defined($e->root) and $e->root) ? 1 : 0;
-        $attr->{'idx_class'} = $collapsed->{'__CLASS__'} if $collapsed->{'__CLASS__'};
-        if (ref($collapsed->{data}) eq 'HASH') {
-            foreach my $k (keys %{$collapsed->{data}}) {
-                next if ref($collapsed->{data}->{$k});
+        $attr->{root} = $e->root ? 1 : 0;
+        $attr->{'idx_class'} = $e->class if $e->has_class;
+
+        my $data = $e->data;
+
+        if (ref($data) eq 'HASH') {
+            foreach my $k (keys %$data) {
+                next if ref($data->{$k});
                 # Add theese to toplevel, but not topple on the amazon stuff 
-                $attr->{"idx_" . $k} = Encode::encode_utf8($collapsed->{data}->{$k});
+                $attr->{"idx_" . $k} = Encode::encode_utf8($data->{$k});
             }
-            
         }
+
         $self->response($obj->post_attributes($attr));
     }
 }

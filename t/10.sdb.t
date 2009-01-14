@@ -21,15 +21,16 @@ my $aws_key     = $ENV{'AWS_ACCESS_KEY_SECRET'};
 
 use ok 'KiokuDB::Backend::AWS::SDB';
 
-my $backend = KiokuDB::Backend::AWS::SDB->new(
-    aws_id => $aws_id,
-    aws_key => $aws_key,
-    aws_domain => 'kiokudb-test-domain-' . lc($aws_id),
-    create => 1
-    
-);
+foreach my $format ( qw(json) ) {
+    my $backend = KiokuDB::Backend::AWS::SDB->new(
+        serializer => $format,
+        aws_id => $aws_id,
+        aws_key => $aws_key,
+        aws_domain => 'kiokudb-test-domain-' . lc($aws_id),
+        create => 1,
+    );
 
-my $sg = $ENV{KIOKU_SDB_KEEP} || Scope::Guard->new(sub { $backend->domain->delete });
+    my $sg = $ENV{KIOKU_SDB_KEEP} || Scope::Guard->new(sub { $backend->domain->delete });
 
-run_all_fixtures( KiokuDB->new( backend => $backend ));
-
+    run_all_fixtures( KiokuDB->new( backend => $backend ));
+}
