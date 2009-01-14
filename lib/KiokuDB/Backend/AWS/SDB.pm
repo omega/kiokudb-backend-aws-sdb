@@ -174,34 +174,26 @@ sub insert {
     my $self = shift;
     my @entries = @_;
     
-    foreach my $e (@entries) {
-        my $obj = $self->_item($e->id);
+    foreach my $entry (@entries) {
+        my $obj = $self->_item($entry->id);
         
-        # TODO handle some sort of prev-stuff here?
-#        if ($e->prev) {
-#            $e->backend_data($e->prev->backend_data);
-#        } else {
-#            $e->backend_data($obj);
-#        }
-        my $attr = {
-            id => $e->id,
-            data => $self->serialize($e),
+        my %attr = (
+            id => $entry->id,
+            data => $self->serialize($entry),
             exists => 1,
-        };
-        $attr->{root} = $e->root ? 1 : 0;
-        $attr->{'idx_class'} = $e->class if $e->has_class;
+            root => ( $entry->root ? 1 : 0 ),
+            ( $entry->has_class ? ( idx_class => $entry->class ) : () ),
+        );
 
-        my $data = $e->data;
-
-        if (ref($data) eq 'HASH') {
+        if ( ref( my $data = $entry->data ) eq 'HASH' ) {
             foreach my $k (keys %$data) {
                 next if ref($data->{$k});
                 # Add theese to toplevel, but not topple on the amazon stuff 
-                $attr->{"idx_" . $k} = Encode::encode_utf8($data->{$k});
+                $attr{"idx_" . $k} = Encode::encode_utf8($data->{$k});
             }
         }
 
-        $self->response($obj->post_attributes($attr));
+        $self->response($obj->post_attributes(\%attr));
     }
 }
 
